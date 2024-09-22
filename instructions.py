@@ -1,9 +1,21 @@
+# to allow forward references
+from __future__ import annotations
+
 from pydantic import BaseModel, Field
-from typing import ClassVar
+from typing import ClassVar, List
 from enum import Enum, auto
 import copy
 
+# ROM is from 0x0 to 0x1fff 
+# TODO: void SHLD / LHLD that are outside of 0x2000 and 0x23ff
+
 allInstructions = {}
+
+class BranchType(Enum):
+   JUMP = auto()
+   CALL = auto()
+   RETURN = auto()
+   RESTART = auto()
 
 class InstrType(Enum):
    CONTROL = auto()
@@ -38,9 +50,36 @@ class Address(BaseModel):
 
 class Label(BaseModel):
    address : Address
+   jumpers : List[Instruction] = []
+   callers : List[Instruction] = []
+
+   def addCaller(self, instruction):
+      if instruction.branchType == BranchType.JUMP:
+         self.jumpers.append(instruction)
+      elif instruction.branchType == BranchType.CALL:
+         self.callers.append(instruction)
+      else:
+         print(f"instruction {str(instruction)} has weird branchtype {instruction.branchType}")
+         quit()
+      return
 
    def __str__(self):
-      return f"j{self.address.rawAddr()}"
+      if len(self.jumpers) > 0 and len(self.callers) == 0:
+         return f"j{self.address.rawAddr()}"
+      elif len(self.jumpers) == 0 and len(self.callers) > 0:
+         return f"c{self.address.rawAddr()}"
+      else:
+         return f"jc{self.address.rawAddr()}"  ## probably garbage
+
+   def infoString(self):
+      out = ""
+      for j in self.jumpers:
+         if out == "":
+            out = j.address.__str__()
+         else:
+            out = out + "," + j.address.__str__()
+
+      return out
 
 class Instruction(BaseModel):
    opcode : int 
@@ -49,11 +88,11 @@ class Instruction(BaseModel):
    numOperands : int
    operandType : OperandType
    origInstrStr : str = None
+   branchType : BranchType = None
 
    alli : ClassVar[dict]  = {}
 
    label : Label = None
-   callers : list = []  
 
    operand1 : int = None
    operand2 : int = None
@@ -92,7 +131,7 @@ class Instruction(BaseModel):
          if self.numOperands > 1:
             out = out + f",{hex(self.operand2)}"
 
-         out = out + "  ; (was: {self.origInstrStr})"
+         out = out + f"  ; (was: {self.origInstrStr})"
 
       else:      
          out = out + f"{self.mnemonic}"
@@ -109,18 +148,17 @@ class Instruction(BaseModel):
             elif self.numOperands == 2:
                out = out + f" #{format(self.operand2, '02x')}{format(self.operand1, '02x')}"
 
-#         for c in self.callers:
-#            out = out + f"************* {c.address}; "
-#         if not out:
-#            out = f"# callers:  {format(c.address, '04x')}"
-#         else:
-#            out = out + ", 1"# + format(c.address, "04x")
+      if self.targetLabel:
+         out = out + ";" + self.targetLabel.infoString()
+
+
       return out
 
    def junk(self):
       self.origInstrStr = self.__str__()
       self.insType = InstrType.JUNK
 
+# https://pastraiser.com/cpu/i8085/i8085_opcodes.html
 Instruction(opcode = 0x0, mnemonic = "NOP", insType=InstrType.CONTROL, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0x1, mnemonic = "LXI B,", insType=InstrType.MOVE, numOperands=2, operandType = OperandType.IMMEDIATE_HYBRID)
 Instruction(opcode = 0x2, mnemonic = "STAX B", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
@@ -313,67 +351,73 @@ Instruction(opcode = 0xbc, mnemonic = "CMP H", insType=InstrType.ARITHMETIC, num
 Instruction(opcode = 0xbd, mnemonic = "CMP L", insType=InstrType.ARITHMETIC, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xbe, mnemonic = "CMP M", insType=InstrType.ARITHMETIC, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xbf, mnemonic = "CMP A", insType=InstrType.ARITHMETIC, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xc0, mnemonic = "RNZ", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xc0, mnemonic = "RNZ", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xc1, mnemonic = "POP B", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xc2, mnemonic = "JNZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
-Instruction(opcode = 0xc3, mnemonic = "JMP", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
-Instruction(opcode = 0xc4, mnemonic = "CNZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xc2, mnemonic = "JNZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
+Instruction(opcode = 0xc3, mnemonic = "JMP", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
+Instruction(opcode = 0xc4, mnemonic = "CNZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xc5, mnemonic = "PUSH B", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xc6, mnemonic = "ADI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xc7, mnemonic = "RST 0", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xc8, mnemonic = "RZ", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xc9, mnemonic = "RET", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xca, mnemonic = "JZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
-Instruction(opcode = 0xcb, mnemonic = "(RSTV)", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xcc, mnemonic = "CZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
-Instruction(opcode = 0xcd, mnemonic = "CALL", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xc8, mnemonic = "RZ", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
+Instruction(opcode = 0xc9, mnemonic = "RET", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
+Instruction(opcode = 0xca, mnemonic = "JZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
+
+# restarts on overflow, PC => 0x40
+Instruction(opcode = 0xcb, mnemonic = "(RSTV)", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RESTART)
+Instruction(opcode = 0xcc, mnemonic = "CZ", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
+Instruction(opcode = 0xcd, mnemonic = "CALL", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xce, mnemonic = "ACI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xcf, mnemonic = "RST 1", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xd0, mnemonic = "RNC", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xd0, mnemonic = "RNC", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xd1, mnemonic = "POP D", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xd2, mnemonic = "JNC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xd2, mnemonic = "JNC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xd3, mnemonic = "OUT", insType=InstrType.CONTROL, numOperands=1, operandType = OperandType.IMMEDIATE)
-Instruction(opcode = 0xd4, mnemonic = "CNC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xd4, mnemonic = "CNC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xd5, mnemonic = "PUSH D", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xd6, mnemonic = "SUI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xd7, mnemonic = "RST 2", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xd8, mnemonic = "RC", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xd8, mnemonic = "RC", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xd9, mnemonic = "(SHLX)", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xda, mnemonic = "JC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xda, mnemonic = "JC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xdb, mnemonic = "IN", insType=InstrType.CONTROL, numOperands=1, operandType = OperandType.IMMEDIATE)
-Instruction(opcode = 0xdc, mnemonic = "CC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
-Instruction(opcode = 0xdd, mnemonic = "(JNK)", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xdc, mnemonic = "CC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
+Instruction(opcode = 0xdd, mnemonic = "(JNK)", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xde, mnemonic = "SBI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xdf, mnemonic = "RST 3", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xe0, mnemonic = "RPO", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xe0, mnemonic = "RPO", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xe1, mnemonic = "POP H", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xe2, mnemonic = "JPO", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xe2, mnemonic = "JPO", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xe3, mnemonic = "XTHL", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xe4, mnemonic = "CPO", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xe4, mnemonic = "CPO", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xe5, mnemonic = "PUSH H", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xe6, mnemonic = "ANI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xe7, mnemonic = "RST 4", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xe8, mnemonic = "RPE", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xe8, mnemonic = "RPE", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xe9, mnemonic = "PCHL", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xea, mnemonic = "JPE", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xea, mnemonic = "JPE", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xeb, mnemonic = "XCHG", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xec, mnemonic = "CPE", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xec, mnemonic = "CPE", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xed, mnemonic = "(LHLX)", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xee, mnemonic = "XRI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xef, mnemonic = "RST 5", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xf0, mnemonic = "RP", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xf0, mnemonic = "RP", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xf1, mnemonic = "POP PSW", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xf2, mnemonic = "JP", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xf2, mnemonic = "JP", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xf3, mnemonic = "DI", insType=InstrType.CONTROL, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xf4, mnemonic = "CP", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xf4, mnemonic = "CP", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xf5, mnemonic = "PUSH PSW", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xf6, mnemonic = "ORI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
+
+# jump to 0x0030
 Instruction(opcode = 0xf7, mnemonic = "RST 6", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xf8, mnemonic = "RM", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)
+Instruction(opcode = 0xf8, mnemonic = "RM", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xf9, mnemonic = "SPHL", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xfa, mnemonic = "JM", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xfa, mnemonic = "JM", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xfb, mnemonic = "EI", insType=InstrType.CONTROL, numOperands=0, operandType = OperandType.NONE)
-Instruction(opcode = 0xfc, mnemonic = "CM", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
-Instruction(opcode = 0xfd, mnemonic = "(JK)", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS)
+Instruction(opcode = 0xfc, mnemonic = "CM", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
+Instruction(opcode = 0xfd, mnemonic = "(JK)", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xfe, mnemonic = "CPI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
+
+# jump to 0x0038
 Instruction(opcode = 0xff, mnemonic = "RST 7", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE)

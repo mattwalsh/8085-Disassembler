@@ -43,31 +43,32 @@ for addr in program:
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
          if line.targetAddress not in program:
-            #print(f"BOGUS address {line.targetAddress} found in {line} at {addr}")
+            print(f"; BOGUS address {line.targetAddress} found in {line} at {addr}")
             line.junk()
 
 labels = {}
 for addr in program:
    line = program[addr]
+   line.address = addr
 
    # walk through all jumps and calls
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
          #  no label for it? make one, 
          if line.targetAddress not in labels:
-            l = Label(address = line.targetAddress)
-            labels[line.targetAddress] = l
+            label = Label(address = line.targetAddress)
+            labels[line.targetAddress] = label
          else:
-            l = labels[line.targetAddress]
+            label = labels[line.targetAddress]
 
          # find the instruction that is called
          target = program[line.targetAddress]
 
          # label the line.  Really should be part of label creation but to be safe...
-         target.label = l
-         line.targetLabel = l
+         target.label = label
+         line.targetLabel = label
 
-         target.callers.append(line)
+         label.addCaller(line)
 
 for pc in program:
    #print(f"{pc} {program[pc]}")
