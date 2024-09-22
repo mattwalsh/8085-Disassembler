@@ -2,6 +2,8 @@ import sys
 from instructions import *
 from collections import OrderedDict
 
+from argparse import ArgumentParser, ArgumentTypeError
+
 alli = Instruction.alli
 #for i in alli:
 #   print(alli[i].model_dump())
@@ -41,7 +43,7 @@ for addr in program:
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
          if line.targetAddress not in program:
-            print(f"BOGUS address {line.targetAddress} found in {line} at {addr}")
+            #print(f"BOGUS address {line.targetAddress} found in {line} at {addr}")
             line.junk()
 
 labels = {}
@@ -68,5 +70,6 @@ for addr in program:
          target.callers.append(line)
 
 for pc in program:
-   print(f"{pc} {program[pc]}")
+   #print(f"{pc} {program[pc]}")
+   print(f"{program[pc]}")
 

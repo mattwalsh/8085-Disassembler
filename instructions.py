@@ -88,11 +88,11 @@ class Instruction(BaseModel):
          out = out + f"DB {hex(self.opcode)}"
 
          if self.numOperands > 0:
-            out = out + f" {hex(self.operand1)}"
+            out = out + f",{hex(self.operand1)}"
          if self.numOperands > 1:
-            out = out + f" {hex(self.operand2)}"
+            out = out + f",{hex(self.operand2)}"
 
-         out = out + "  # (was: {self.origInstrStr})"
+         out = out + "  ; (was: {self.origInstrStr})"
 
       else:      
          out = out + f"{self.mnemonic}"
@@ -104,10 +104,10 @@ class Instruction(BaseModel):
                out = out + f" {self.targetAddress}"
 
          else:
-            if self.numOperands > 0:
-               out = out + f" {hex(self.operand1)}"
-            if self.numOperands > 1:
-               out = out + f" {hex(self.operand2)}"
+            if self.numOperands == 1:
+               out = out + f" #{format(self.operand1, '02x')}"
+            elif self.numOperands == 2:
+               out = out + f" #{format(self.operand2, '02x')}{format(self.operand1, '02x')}"
 
 #         for c in self.callers:
 #            out = out + f"************* {c.address}; "
