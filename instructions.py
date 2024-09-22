@@ -20,12 +20,27 @@ class OperandType(Enum):
    IMMEDIATE_HYBRID = auto()
    CHARACTER = auto()
 
-class Label(BaseModel):
-   address : int 
-   callers : list = []  
+class Address(BaseModel):
+   address : int
+   
+   def __init__(self, addressIn, **kwargs):
+      kwargs.update({'address' : addressIn})
+      super().__init__(**kwargs)
 
-   def dump(self):
-      return f"j{format(self.address, '04x')}"
+   def __hash__(self):
+      return self.address
+
+   def rawAddr(self):
+      return f"{format(self.address, '04x')}"
+   
+   def __str__(self):
+      return f"${self.rawAddr()}"
+
+class Label(BaseModel):
+   address : Address
+
+   def __str__(self):
+      return f"j{self.address.rawAddr()}"
 
 class Instruction(BaseModel):
    opcode : int 
@@ -33,15 +48,20 @@ class Instruction(BaseModel):
    insType : InstrType
    numOperands : int
    operandType : OperandType
+   origInstrStr : str = None
+
    alli : ClassVar[dict]  = {}
+
    label : Label = None
-   labelAddr : Label = None
+   callers : list = []  
 
    operand1 : int = None
    operand2 : int = None
 
-   address : int = None
-   origInstrStr : str = None
+   address : Address = None
+
+   targetAddress : Address = None
+   targetLabel : Label = None
 
    def __init__(self, **data):
       super().__init__(**data)
@@ -53,14 +73,14 @@ class Instruction(BaseModel):
       newInstr.operand2 = operand2 
     
       if newInstr.operandType == OperandType.ADDRESS:
-         newInstr.address = int(newInstr.operand1 + (newInstr.operand2 << 8))
+         newInstr.targetAddress = Address(int(newInstr.operand1 + (newInstr.operand2 << 8)))
    
       return newInstr
 
-   def dump(self):
+   def __str__(self):
       out = ""
       if self.label is not None:
-         out = out + f"{self.label.dump()}:  "
+         out = out + f"{self.label}:  "
       else:
          out = out + f"        "
 
@@ -78,20 +98,27 @@ class Instruction(BaseModel):
          out = out + f"{self.mnemonic}"
 
          if self.operandType == OperandType.ADDRESS:
-            if self.labelAddr is not None:
-               out = out + f" {self.labelAddr.dump()}"
+            if self.targetLabel is not None:
+               out = out + f" {self.targetLabel}"
             else:
-               out = out + f" ${format(self.address, '04x')}"
+               out = out + f" {self.targetAddress}"
 
          else:
             if self.numOperands > 0:
                out = out + f" {hex(self.operand1)}"
             if self.numOperands > 1:
                out = out + f" {hex(self.operand2)}"
+
+#         for c in self.callers:
+#            out = out + f"************* {c.address}; "
+#         if not out:
+#            out = f"# callers:  {format(c.address, '04x')}"
+#         else:
+#            out = out + ", 1"# + format(c.address, "04x")
       return out
 
    def junk(self):
-      self.origInstrStr = self.dump()
+      self.origInstrStr = self.__str__()
       self.insType = InstrType.JUNK
 
 Instruction(opcode = 0x0, mnemonic = "NOP", insType=InstrType.CONTROL, numOperands=0, operandType = OperandType.NONE)

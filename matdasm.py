@@ -31,7 +31,7 @@ with open(sys.argv[1], mode='rb') as file: # b is important -> binary
 
       instance = instr.instantiate(operand1, operand2)
 
-      program[PC] = instance
+      program[Address(PC)] = instance
       PC = nextPC
 
 # pass to eliminate junk jumps / calls
@@ -40,25 +40,33 @@ for addr in program:
 
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
-         if line.address not in program:
-            print(f"BOGUS address {format(line.address, '04x')} found in {line.dump()} at {hex(addr)}")
+         if line.targetAddress not in program:
+            print(f"BOGUS address {line.targetAddress} found in {line} at {addr}")
             line.junk()
 
 labels = {}
 for addr in program:
    line = program[addr]
 
+   # walk through all jumps and calls
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
-         target = program[line.address]
-         if line.address not in labels:
-            l = Label(address = line.address)
-            labels[line.address] = l
+         #  no label for it? make one, 
+         if line.targetAddress not in labels:
+            l = Label(address = line.targetAddress)
+            labels[line.targetAddress] = l
+         else:
+            l = labels[line.targetAddress]
 
-         line.labelAddr = l
+         # find the instruction that is called
+         target = program[line.targetAddress]
+
+         # label the line.  Really should be part of label creation but to be safe...
          target.label = l
-         l.callers.append(line)      
+         line.targetLabel = l
+
+         target.callers.append(line)
 
 for pc in program:
-   print(f"{format(pc, '04x')} {program[pc].dump()}")
+   print(f"{pc} {program[pc]}")
 
