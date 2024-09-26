@@ -49,35 +49,51 @@ class Address(BaseModel):
       return f"${self.rawAddr()}"
 
 class Label(BaseModel):
+   labels  : ClassVar[List[Label]] = {}
    address : Address
    jumpers : List[Instruction] = []
-   callers : List[Instruction] = []
+   isOrigin : bool = False
+   isJump: bool = False
+   isCall: bool = False
+
+   @classmethod
+   def makeLabel(self, address):
+      if address not in Label.labels:
+         label = Label(address = address)
+         Label.labels[address] = label
+      else:
+         label = Label.labels[address]
+      return label   
+
+   def setOrigin(self):
+      self.isOrigin = True
 
    def addCaller(self, instruction):
+      self.jumpers.append(instruction)
       if instruction.branchType == BranchType.JUMP:
-         self.jumpers.append(instruction)
+         self.isJump = True
       elif instruction.branchType == BranchType.CALL:
-         self.callers.append(instruction)
-      else:
-         print(f"instruction {str(instruction)} has weird branchtype {instruction.branchType}")
-         quit()
+         self.isCall = True
       return
 
    def __str__(self):
-      if len(self.jumpers) > 0 and len(self.callers) == 0:
-         return f"j{self.address.rawAddr()}"
-      elif len(self.jumpers) == 0 and len(self.callers) > 0:
-         return f"c{self.address.rawAddr()}"
-      else:
-         return f"jc{self.address.rawAddr()}"  ## probably garbage
+      prefix = ""
+      if self.isJump:
+         prefix = prefix + "j"
+      if self.isCall:
+         prefix = prefix + "c"
+      if self.isOrigin:
+         prefix = prefix + "o"
+
+      return f"{prefix}{self.address.rawAddr()}"  ## probably garbage
 
    def infoString(self):
       out = ""
       for j in self.jumpers:
          if out == "":
-            out = j.address.__str__()
+            out = j.label.__str__()
          else:
-            out = out + "," + j.address.__str__()
+            out = out + "," + j.label.__str__()
 
       return out
 
@@ -119,9 +135,10 @@ class Instruction(BaseModel):
    def __str__(self):
       out = ""
       if self.label is not None:
-         out = out + f"{self.label}:  "
+         l = self.label.__str__()
+         out = out + f"{l}:" + (" "*(7 - len(l)))
       else:
-         out = out + f"        "
+         out = out + (" "*8)
 
       if self.insType == InstrType.JUNK:
          out = out + f"DB {hex(self.opcode)}"
@@ -140,6 +157,7 @@ class Instruction(BaseModel):
             if self.targetLabel is not None:
                out = out + f" {self.targetLabel}"
             else:
+               # I guesss currently, I always have a target label
                out = out + f" {self.targetAddress}"
 
          else:
@@ -148,9 +166,10 @@ class Instruction(BaseModel):
             elif self.numOperands == 2:
                out = out + f" #{format(self.operand2, '02x')}{format(self.operand1, '02x')}"
 
-      if self.targetLabel:
-         out = out + ";" + self.targetLabel.infoString()
-
+      if self.label:
+         s = self.label.infoString()
+         if s:
+            out = out + " ;" + s
 
       return out
 

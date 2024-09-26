@@ -46,7 +46,6 @@ for addr in program:
             print(f"; BOGUS address {line.targetAddress} found in {line} at {addr}")
             line.junk()
 
-labels = {}
 for addr in program:
    line = program[addr]
    line.address = addr
@@ -55,19 +54,18 @@ for addr in program:
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
          #  no label for it? make one, 
-         if line.targetAddress not in labels:
-            label = Label(address = line.targetAddress)
-            labels[line.targetAddress] = label
-         else:
-            label = labels[line.targetAddress]
+         label = Label.makeLabel(line.targetAddress)
 
          # find the instruction that is called
          target = program[line.targetAddress]
 
-         # label the line.  Really should be part of label creation but to be safe...
+         # label the target
          target.label = label
          line.targetLabel = label
 
+         # label the line
+         line.label = Label.makeLabel(line.address)
+         line.label.setOrigin()
          label.addCaller(line)
 
 for pc in program:
