@@ -19,6 +19,7 @@ class BranchType(Enum):
 
 class InstrType(Enum):
    CONTROL = auto()
+   PORT = auto()
    BRANCH = auto()
    ARITHMETIC = auto()
    MOVE = auto()
@@ -46,7 +47,10 @@ class Address(BaseModel):
       return f"{format(self.address, '04x')}"
    
    def __str__(self):
-      return f"${self.rawAddr()}"
+      if self.address in Instruction.syms:
+         return Instruction.syms[self.address]
+      else:
+         return f"${self.rawAddr()}"
 
 class Label(BaseModel):
    labels  : ClassVar[List[Label]] = {}
@@ -107,6 +111,8 @@ class Instruction(BaseModel):
    branchType : BranchType = None
 
    alli : ClassVar[dict]  = {}
+   syms : ClassVar[dict[int, string]]  = {}
+   ports : ClassVar[dict[int, string]]  = {}
 
    label : Label = None
 
@@ -153,18 +159,25 @@ class Instruction(BaseModel):
       else:      
          out = out + f"{self.mnemonic}"
 
-         if self.operandType == OperandType.ADDRESS:
-            if self.targetLabel is not None:
-               out = out + f" {self.targetLabel}"
+         if self.insType == InstrType.PORT:
+            if self.operand1 in Instruction.ports:
+               out = out + f" {Instruction.ports[self.operand1]}"
             else:
-               # I guesss currently, I always have a target label
-               out = out + f" {self.targetAddress}"
-
-         else:
-            if self.numOperands == 1:
                out = out + f" #{format(self.operand1, '02x')}"
-            elif self.numOperands == 2:
-               out = out + f" #{format(self.operand2, '02x')}{format(self.operand1, '02x')}"
+                 
+         else:
+            if self.operandType == OperandType.ADDRESS:
+               if self.targetLabel is not None:
+                  out = out + f" {self.targetLabel}"
+               else:
+                  out = out + f" {self.targetAddress}"
+
+            else:
+               if self.numOperands == 1:
+                  out = out + f" #{format(self.operand1, '02x')}"
+               elif self.numOperands == 2:
+                  addr = (self.operand2 << 8) + self.operand1
+                  out = out + f" #{format(addr, '04x')}"
 
       if self.label:
          s = self.label.infoString()
@@ -391,7 +404,7 @@ Instruction(opcode = 0xcf, mnemonic = "RST 1", insType=InstrType.BRANCH, numOper
 Instruction(opcode = 0xd0, mnemonic = "RNC", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xd1, mnemonic = "POP D", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xd2, mnemonic = "JNC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
-Instruction(opcode = 0xd3, mnemonic = "OUT", insType=InstrType.CONTROL, numOperands=1, operandType = OperandType.IMMEDIATE)
+Instruction(opcode = 0xd3, mnemonic = "OUT", insType=InstrType.PORT, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xd4, mnemonic = "CNC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xd5, mnemonic = "PUSH D", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xd6, mnemonic = "SUI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)
@@ -399,7 +412,7 @@ Instruction(opcode = 0xd7, mnemonic = "RST 2", insType=InstrType.BRANCH, numOper
 Instruction(opcode = 0xd8, mnemonic = "RC", insType=InstrType.BRANCH, numOperands=0, operandType = OperandType.NONE, branchType = BranchType.RETURN)
 Instruction(opcode = 0xd9, mnemonic = "(SHLX)", insType=InstrType.MOVE, numOperands=0, operandType = OperandType.NONE)
 Instruction(opcode = 0xda, mnemonic = "JC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
-Instruction(opcode = 0xdb, mnemonic = "IN", insType=InstrType.CONTROL, numOperands=1, operandType = OperandType.IMMEDIATE)
+Instruction(opcode = 0xdb, mnemonic = "IN", insType=InstrType.PORT, numOperands=1, operandType = OperandType.IMMEDIATE)
 Instruction(opcode = 0xdc, mnemonic = "CC", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.CALL)
 Instruction(opcode = 0xdd, mnemonic = "(JNK)", insType=InstrType.BRANCH, numOperands=2, operandType = OperandType.ADDRESS, branchType = BranchType.JUMP)
 Instruction(opcode = 0xde, mnemonic = "SBI", insType=InstrType.ARITHMETIC, numOperands=1, operandType = OperandType.IMMEDIATE)

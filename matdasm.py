@@ -1,6 +1,9 @@
 import sys
+import yaml
 from instructions import *
 from collections import OrderedDict
+from pathlib import Path
+from utils import hexParse
 
 from argparse import ArgumentParser, ArgumentTypeError
 
@@ -14,7 +17,26 @@ if len(sys.argv) < 2:
 
 program = OrderedDict()
 
+sym_path = Path(f"{sys.argv[1]}.yml")
+if sym_path.is_file():
+   with open(sym_path) as file: 
+      inp = yaml.safe_load(file)
+
+   if inp['addresses']:
+      for i in inp['addresses']:
+         addrInt = hexParse(inp['addresses'][i])
+         Instruction.syms[addrInt] = i
+         print(f"{i} EQU {hex(addrInt)}")
+
+   if inp['ports']:
+      print("\n; PORTS")
+      for i in inp['ports']:
+         portInt = hexParse(inp['ports'][i])
+         Instruction.ports[portInt] = i
+         print(f"{i} EQU {hex(portInt)}")
+
 PC = 0
+
 with open(sys.argv[1], mode='rb') as file: # b is important -> binary
     while (byte := file.read(1)):
       instr = alli[int.from_bytes(byte)]
