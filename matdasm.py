@@ -22,18 +22,31 @@ if sym_path.is_file():
    with open(sym_path) as file: 
       inp = yaml.safe_load(file)
 
-   if inp['addresses']:
+   if 'addresses' in inp:
       for i in inp['addresses']:
          addrInt = hexParse(inp['addresses'][i])
          Instruction.syms[addrInt] = i
          print(f"{i} EQU {hex(addrInt)}")
 
-   if inp['ports']:
-      print("\n; PORTS")
-      for i in inp['ports']:
-         portInt = hexParse(inp['ports'][i])
-         Instruction.ports[portInt] = i
+   if 'inPorts' in inp:
+      print("\n; INPUT PORTS")
+      for i in inp['inPorts']:
+         portInt = hexParse(inp['inPorts'][i])
+         Instruction.inPorts[portInt] = i
          print(f"{i} EQU {hex(portInt)}")
+
+   if 'outPorts' in inp:
+      print("\n; OUTPUT PORTS")
+      for i in inp['outPorts']:
+         portInt = hexParse(inp['outPorts'][i])
+         Instruction.outPorts[portInt] = i
+         print(f"{i} EQU {hex(portInt)}")
+
+   if 'notes' in inp:
+#      print("\n; OUTPUT PORTS")
+      for i in inp['notes']:
+         addr = hexParse(i) #inp['outPorts'][i])
+         Instruction.notes[addr] = inp['notes'][i]
 
 PC = 0
 
@@ -91,6 +104,8 @@ for addr in program:
          label.addCaller(line)
 
 for pc in program:
+   if pc.address in Instruction.notes:
+      print(f"; {Instruction.notes[pc.address]}")
    #print(f"{pc} {program[pc]}")
    print(f"{program[pc]}")
 
