@@ -8,16 +8,15 @@ from utils import hexParse
 from argparse import ArgumentParser, ArgumentTypeError
 
 alli = Instruction.alli
-#for i in alli:
-#   print(alli[i].model_dump())
 
-if len(sys.argv) < 2:
-   print("missing filename")
-   quit()
+parser = ArgumentParser()
+parser.add_argument('-i','--input', help='Input binary file', required=True, type=str)
+parser.add_argument('-a', help='show addresses for each lineInput binary file', action="store_true", default=False)
+args = parser.parse_args()
 
 program = OrderedDict()
 
-sym_path = Path(f"{sys.argv[1]}.yml")
+sym_path = Path(f"{args.input}.yml")
 if sym_path.is_file():
    with open(sym_path) as file: 
       inp = yaml.safe_load(file)
@@ -50,7 +49,7 @@ if sym_path.is_file():
 
 PC = 0
 
-with open(sys.argv[1], mode='rb') as file: # b is important -> binary
+with open(args.input, mode='rb') as file: # b is important -> binary
     while (byte := file.read(1)):
       instr = alli[int.from_bytes(byte)]
 
@@ -106,6 +105,11 @@ for addr in program:
 for pc in program:
    if pc.address in Instruction.notes:
       print(f"; {Instruction.notes[pc.address]}")
-   #print(f"{pc} {program[pc]}")
-   print(f"{program[pc]}")
+   if args.a:
+      print(f"{pc} {program[pc]}")
+   else:
+      print(f"{program[pc]}")
+
+
+
 
