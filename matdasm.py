@@ -10,8 +10,9 @@ from argparse import ArgumentParser, ArgumentTypeError
 alli = Instruction.alli
 
 parser = ArgumentParser()
-parser.add_argument('-i','--input', help='Input binary file', required=True, type=str)
-parser.add_argument('-a', help='show addresses for each lineInput binary file', action="store_true", default=False)
+parser.add_argument('-i', '--input', help='Input binary file', required=True, type=str)
+parser.add_argument('-a', '--addresses', help='show addresses for each line', action="store_true", default=False)
+parser.add_argument('-w', '--binaryops', help='Show opcodes w/ binary', action="store_true", default=False)
 args = parser.parse_args()
 
 program = OrderedDict()
@@ -19,35 +20,47 @@ program = OrderedDict()
 sym_path = Path(f"{args.input}.yml")
 if sym_path.is_file():
    with open(sym_path) as file: 
-      inp = yaml.safe_load(file)
+      yml = yaml.safe_load(file)
 
-   if 'addresses' in inp:
-      for i in inp['addresses']:
-         addrInt = hexParse(inp['addresses'][i])
+   if 'addresses' in yml:
+      for i in yml['addresses']:
+         addrInt = hexParse(yml['addresses'][i])
          Instruction.syms[addrInt] = i
          print(f"{i} EQU {hex(addrInt)}")
 
-   if 'inPorts' in inp:
+   if 'labels' in yml:
+      for i in yml['labels']:
+         addrInt = hexParse(yml['labels'][i])
+         Instruction.labels[addrInt] = i
+
+   if 'inPorts' in yml:
       print("\n; INPUT PORTS")
-      for i in inp['inPorts']:
-         portInt = hexParse(inp['inPorts'][i])
+      for i in yml['inPorts']:
+         portInt = hexParse(yml['inPorts'][i])
          Instruction.inPorts[portInt] = i
          print(f"{i} EQU {hex(portInt)}")
 
-   if 'outPorts' in inp:
+   if 'outPorts' in yml:
       print("\n; OUTPUT PORTS")
-      for i in inp['outPorts']:
-         portInt = hexParse(inp['outPorts'][i])
+      for i in yml['outPorts']:
+         portInt = hexParse(yml['outPorts'][i])
          Instruction.outPorts[portInt] = i
          print(f"{i} EQU {hex(portInt)}")
 
-   if 'notes' in inp:
-#      print("\n; OUTPUT PORTS")
-      for i in inp['notes']:
-         addr = hexParse(i) #inp['outPorts'][i])
-         Instruction.notes[addr] = inp['notes'][i]
+   if 'notes' in yml:
+      for i in yml['notes']:
+         addr = hexParse(i)
+         Instruction.notes[addr] = yml['notes'][i]
+
+   if 'not_code' in yml:
+      for i in yml['not_code']:
+         label = i
+         start = hexParse(yml['not_code'][i][0])
+         end = hexParse(yml['not_code'][i][1])
+         Instruction.addDataRange((start, end))
 
 PC = 0
+Instruction.opcodeBinary = args.binaryops
 
 with open(args.input, mode='rb') as file: # b is important -> binary
     while (byte := file.read(1)):
@@ -74,11 +87,15 @@ with open(args.input, mode='rb') as file: # b is important -> binary
 for addr in program:
    line = program[addr]
 
+   if Instruction.checkIfData(addr.address):
+      line.junk()
+
    if line.insType == InstrType.BRANCH:
       if line.operandType == OperandType.ADDRESS:
          if line.targetAddress not in program:
-            print(f"; BOGUS address {line.targetAddress} found in {line} at {addr}")
-            line.junk()
+            if not Instruction.checkIfData(addr.address):
+            #print(f"; BOGUS address {line.targetAddress} found in {line} at {addr}")
+               line.junk()
 
 for addr in program:
    line = program[addr]
@@ -91,21 +108,22 @@ for addr in program:
          label = Label.makeLabel(line.targetAddress)
 
          # find the instruction that is called
-         target = program[line.targetAddress]
+         if line.targetAddress in program:
+            target = program[line.targetAddress]
 
-         # label the target
-         target.label = label
-         line.targetLabel = label
+            # label the target
+            target.label = label
+            line.targetLabel = label
 
-         # label the line
-         line.label = Label.makeLabel(line.address)
-         line.label.setOrigin()
-         label.addCaller(line)
+            # label the line
+            line.label = Label.makeLabel(line.address)
+            line.label.setOrigin()
+            label.addCaller(line)
 
 for pc in program:
    if pc.address in Instruction.notes:
       print(f"; {Instruction.notes[pc.address]}")
-   if args.a:
+   if args.addresses:
       print(f"{pc} {program[pc]}")
    else:
       print(f"{program[pc]}")

@@ -11,6 +11,7 @@ import copy
 
 allInstructions = {}
 
+
 class BranchType(Enum):
    JUMP = auto()
    CALL = auto()
@@ -90,7 +91,11 @@ class Label(BaseModel):
       if self.isOrigin:
          prefix = prefix + "o"
 
-      return f"{prefix}{self.address.rawAddr()}"  ## probably garbage
+      saa = self.address.address
+      if saa in Instruction.labels:
+         return f"{prefix}{Instruction.labels[saa]}"
+      else:
+         return f"{prefix}{self.address.rawAddr()}"  ## probably garbage
 
    def infoString(self):
       out = ""
@@ -113,9 +118,12 @@ class Instruction(BaseModel):
 
    alli : ClassVar[dict]  = {}
    syms : ClassVar[dict[int, string]]  = {}
+   labels : ClassVar[dict[int, string]]  = {}
    inPorts : ClassVar[dict[int, string]]  = {}
    outPorts : ClassVar[dict[int, string]]  = {}
    notes : ClassVar[dict[int, string]]  = {}
+   opcodeBinary : ClassVar[bool] = False
+   dataRanges : ClassVar[tuple] = None
 
    label : Label = None
 
@@ -131,6 +139,38 @@ class Instruction(BaseModel):
       super().__init__(**data)
       Instruction.alli[self.opcode] = self
 
+   @classmethod
+   def checkIfData(self, check):
+      if self.dataRanges is not None:
+         for r in self.dataRanges:
+            if r[0] <= check and r[1] >= check:
+               return True
+
+      return False
+
+   @classmethod
+   def addDataRange(self, dbRange):
+      if self.dataRanges is not None:
+        ranges = self.dataRanges
+      else:
+         ranges = []
+
+      ranges.append(dbRange)
+      merged_ranges = []
+
+      # ugly, can't just use arrays because can't sort them
+      for start, end in sorted(ranges):
+          if merged_ranges and start <= merged_ranges[-1][1]:
+              merged_ranges[-1][1] = max(merged_ranges[-1][1], end)
+          else:
+              merged_ranges.append([start, end])
+
+      out = []
+      for r in merged_ranges:
+         out.append((r[0], r[1]))
+      
+      Instruction.dataRanges = out
+
    def instantiate(self, operand1 = None, operand2 = None):
       newInstr = copy.deepcopy(self)
       newInstr.operand1 = operand1  
@@ -145,19 +185,28 @@ class Instruction(BaseModel):
       out = ""
       if self.label is not None:
          l = self.label.__str__()
-         out = out + f"{l}:" + (" "*(7 - len(l)))
+         out = out + f"{l}:" + (" "*max(1, (7 - len(l))))
       else:
          out = out + (" "*8)
 
+      if Instruction.opcodeBinary:
+         out = out + f" {format(self.opcode, '02x')}"
+
+         if self.numOperands >= 1:
+            out = out + f" {format(self.operand1, '02x')}" 
+         if self.numOperands >= 2:
+            out = out + f" {format(self.operand2, '02x')}" 
+         out = out + (" "*(7 - self.numOperands*3))
+
       if self.insType == InstrType.JUNK:
-         out = out + f"DB {hex(self.opcode)}"
+         out = out + f"DB #{format(self.opcode, '02x')}"
 
          if self.numOperands > 0:
-            out = out + f",{hex(self.operand1)}"
+            out = out + f",#{format(self.operand1, '02x')}"
          if self.numOperands > 1:
-            out = out + f",{hex(self.operand2)}"
+            out = out + f",#{format(self.operand2, '02x')}"
 
-         out = out + f"  ; (was: {self.origInstrStr})"
+#         out = out + f"  ; (was: {self.origInstrStr})"
 
       else:      
          out = out + f"{self.mnemonic}"
