@@ -124,7 +124,10 @@ for pc in program:
    if pc.address in Instruction.notes:
       print(f"; {Instruction.notes[pc.address]}")
    if args.addresses:
-      print(f"{pc} {program[pc]}")
+      l = program[pc]
+      if l.label and l.label.isCall:
+         print(" ")
+      print(f"{pc} {l}")
    else:
       print(f"{program[pc]}")
 

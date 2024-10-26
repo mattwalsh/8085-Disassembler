@@ -185,7 +185,10 @@ class Instruction(BaseModel):
       out = ""
       if self.label is not None:
          l = self.label.__str__()
-         out = out + f"{l}:" + (" "*max(1, (7 - len(l))))
+         if len(l) > 7:
+            out = out + f"{l}:\n" + " "*14
+         else:
+            out = out + f"{l}:" + (" "*max(1, (7 - len(l))))
       else:
          out = out + (" "*8)
 
@@ -239,6 +242,8 @@ class Instruction(BaseModel):
          if s:
             out = out + " ;" + s
 
+      if self.mnemonic == "RET":
+         out = out + "\n"
       return out
 
    def junk(self):
