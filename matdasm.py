@@ -64,38 +64,40 @@ Instruction.opcodeBinary = args.binaryops
 
 with open(args.input, mode='rb') as file: # b is important -> binary
     while (byte := file.read(1)):
-      instr = alli[int.from_bytes(byte)]
 
-      operand1 = None
-      operand2 = None
+      instr = alli[int.from_bytes(byte)]
       nextPC = PC + 1
 
-      if instr.numOperands >= 1:
-         operand1 = int.from_bytes(file.read(1))
-         nextPC = nextPC + 1
- 
-      if instr.numOperands == 2:
-         operand2 = int.from_bytes(file.read(1))
-         nextPC = nextPC + 1
+      if not Instruction.checkIfData(PC):
+         operand1 = None
+         operand2 = None
 
-      instance = instr.instantiate(operand1, operand2)
+         if instr.numOperands >= 1:
+            operand1 = int.from_bytes(file.read(1))
+            nextPC = nextPC + 1
+    
+         if instr.numOperands == 2:
+            operand2 = int.from_bytes(file.read(1))
+            nextPC = nextPC + 1
 
-      program[Address(PC)] = instance
+         instance = instr.instantiate(operand1, operand2)
+         program[Address(PC)] = instance
+      else:
+         instance = instr.instantiateDB()
+         program[Address(PC)] = instance
       PC = nextPC
 
 # pass to eliminate junk jumps / calls
 for addr in program:
    line = program[addr]
 
-   if Instruction.checkIfData(addr.address):
-      line.junk()
-
-   if line.insType == InstrType.BRANCH:
-      if line.operandType == OperandType.ADDRESS:
-         if line.targetAddress not in program:
-            if not Instruction.checkIfData(addr.address):
-            #print(f"; BOGUS address {line.targetAddress} found in {line} at {addr}")
-               line.junk()
+# see $0445 why
+#   if line.insType == InstrType.BRANCH:
+#      if line.operandType == OperandType.ADDRESS:
+#         if line.targetAddress not in program:
+#            if not Instruction.checkIfData(addr.address):
+#            #print(f"; BOGUS address {line.targetAddress} found in {line} at {addr}")
+#               line.junk()
 
 for addr in program:
    line = program[addr]

@@ -113,7 +113,7 @@ class Instruction(BaseModel):
    insType : InstrType
    numOperands : int
    operandType : OperandType
-   origInstrStr : str = None
+#   origInstrStr : str = None
    branchType : BranchType = None
 
    alli : ClassVar[dict]  = {}
@@ -181,6 +181,15 @@ class Instruction(BaseModel):
    
       return newInstr
 
+   def instantiateDB(self):
+      newInstr = copy.deepcopy(self)
+      newInstr.operand1 = None  
+      newInstr.operand2 = None 
+
+      newInstr.numOperands = 0
+      newInstr.insType = InstrType.JUNK
+      return newInstr
+
    def __str__(self):
       out = ""
       if self.label is not None:
@@ -214,7 +223,13 @@ class Instruction(BaseModel):
       else:      
          out = out + f"{self.mnemonic}"
 
-         if self.insType == InstrType.INPORT:
+         if self.insType == InstrType.OUTPORT:
+            if self.operand1 in Instruction.outPorts:
+               out = out + f" {Instruction.outPorts[self.operand1]}"
+            else:
+               out = out + f" #{format(self.operand1, '02x')}"
+
+         elif self.insType == InstrType.INPORT:
             if self.operand1 in Instruction.inPorts:
                out = out + f" {Instruction.inPorts[self.operand1]}"
             else:
@@ -246,9 +261,6 @@ class Instruction(BaseModel):
          out = out + "\n"
       return out
 
-   def junk(self):
-      self.origInstrStr = self.__str__()
-      self.insType = InstrType.JUNK
 
 # https://pastraiser.com/cpu/i8085/i8085_opcodes.html
 Instruction(opcode = 0x0, mnemonic = "NOP", insType=InstrType.CONTROL, numOperands=0, operandType = OperandType.NONE)
